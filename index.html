@@ -1,0 +1,538 @@
+<!doctype html>
+<html lang="mn">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ОТ экспортын тээврийн маршрут</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<link rel="stylesheet" href="https://unpkg.com/@geoman-io/leaflet-geoman-free@2.17.0/dist/leaflet-geoman.css">
+<style>
+  :root { --ink:#1d2733; --yel:#ffd166; --panel:#fbf8f1; --edge:#9a9079; --org:#f08c00; --load:#1e5eff; --empty:#17a34a; }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; font-family: system-ui, -apple-system, "Segoe UI", sans-serif; color: var(--ink); background: var(--panel); }
+  #wrap { display: flex; height: 100%; }
+  #side { width: 300px; flex: none; display: flex; flex-direction: column; background: var(--panel); border-right: 1px solid var(--edge); overflow: hidden; }
+  #head { background: var(--ink); color: #fff; padding: 12px 14px; }
+  #head small { color: var(--yel); font-weight: 700; letter-spacing: .04em; font-size: 10px; display: block; margin-bottom: 4px; }
+  #head b { font-size: 16px; }
+  #scroll { overflow-y: auto; padding: 10px 12px 16px; flex: 1; }
+  h3 { font-size: 11px; letter-spacing: .08em; margin: 14px 0 6px; color: #6b6455; }
+  .row { display: flex; align-items: flex-start; gap: 8px; padding: 6px 6px; border-radius: 8px; cursor: pointer; font-size: 13px; line-height: 1.25; }
+  .row:hover { background: #f1ead9; }
+  .row.on { background: #ffe9b0; }
+  .row .num { flex: none; width: 22px; height: 22px; border-radius: 6px; background: var(--yel); font-weight: 700; font-size: 12px; display: grid; place-items: center; }
+  .row input { margin: 3px 0 0; }
+  .row span { flex: 1; }
+  button, select { font: inherit; font-size: 13px; padding: 7px 10px; border-radius: 8px; border: 1px solid var(--edge); background: #fff; color: var(--ink); cursor: pointer; }
+  button:hover { background: #f4ecd9; }
+  button.act { background: var(--ink); color: #fff; border-color: var(--ink); }
+  button.warn.act { background: #d62828; border-color: #d62828; }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+  .grid .wide { grid-column: 1 / -1; }
+  #hint { font-size: 12px; line-height: 1.4; background: #fff; border: 1px solid var(--edge); border-radius: 8px; padding: 8px 10px; margin-top: 8px; min-height: 52px; }
+  .leg { display: flex; align-items: center; gap: 8px; font-size: 12px; margin: 4px 0; }
+  .leg i { flex: none; width: 34px; height: 7px; border-radius: 4px; display: inline-block; }
+  #map { flex: 1; min-width: 0; background: #2b2f33; }
+  body.busy, body.busy * { cursor: progress !important; }
+  .lbl { background: none; border: none; }
+  .lbl > div { position: absolute; transform: translate(-50%, -50%); white-space: pre; text-align: center; background: #fff; border: 2px solid var(--org);
+               border-radius: 6px; padding: 3px 7px; font-size: 12px; line-height: 1.25; color: var(--ink); box-shadow: 0 1px 3px rgba(0,0,0,.35); }
+  .lbl > div.bold { font-weight: 700; }
+  .lbl > div.plain { background: none; border: none; box-shadow: none; font-weight: 700; color: #fff; text-shadow: 0 0 3px #000, 0 0 3px #000, 0 0 2px #000; }
+  .lbl > div.km { font-size: 10px; font-weight: 700; padding: 1px 4px; border-width: 1px; border-color: #3b4754; }
+  .lbl > div.badge { width: 24px; height: 24px; padding: 0; border-radius: 50%; border: 2px solid #fff; color: #fff; font-weight: 700; display: grid; place-items: center; }
+  .tip { background: none; border: none; }
+  .tip > div { position: absolute; transform: translate(-50%, -50%); width: 12px; height: 12px; border: 2px solid #fff; box-shadow: 0 0 2px #000; }
+  .arr { background: none; border: none; pointer-events: none !important; }
+  .arr > div { position: absolute; width: 0; height: 0; }
+  .arr svg { position: absolute; left: -6px; top: -6px; }
+  .del-mode .leaflet-interactive, .del-mode .lbl > div { cursor: not-allowed !important; }
+  .row .zoom { flex: none; border: none; background: none; padding: 0 2px; font-size: 15px; line-height: 22px; opacity: .55; }
+  .row .zoom:hover { opacity: 1; background: none; }
+  #pal { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; }
+  #pal .ic { aspect-ratio: 1; border: 1px solid var(--edge); border-radius: 8px; background: #fff center/70% no-repeat; cursor: pointer; padding: 0; }
+  #pal .ic.sel { outline: 3px solid var(--ink); }
+  #pal .ic.add { font-size: 20px; color: #6b6455; }
+  #mapbox { flex: 1; min-width: 0; position: relative; display: flex; }
+  #frame { position: absolute; display: none; border: 3px dashed var(--yel); box-shadow: 0 0 0 9999px rgba(0,0,0,.42); pointer-events: none; z-index: 900; }
+  #xbar { position: absolute; left: 50%; top: 10px; transform: translateX(-50%); z-index: 950; display: none; background: var(--panel); border: 1px solid var(--edge);
+          border-radius: 10px; padding: 8px 10px; box-shadow: 0 2px 10px rgba(0,0,0,.4); gap: 6px; align-items: center; flex-wrap: wrap; max-width: calc(100% - 20px); }
+  #xbar input { font: inherit; font-size: 13px; padding: 6px 8px; border: 1px solid var(--edge); border-radius: 8px; }
+  #xbar #xTitle { width: 260px; } #xbar #xNum { width: 52px; }
+  #modal { position: fixed; inset: 0; background: rgba(0,0,0,.6); z-index: 2000; display: none; align-items: center; justify-content: center; padding: 16px; }
+  #modal > div { background: var(--panel); border-radius: 12px; padding: 14px; max-width: 760px; width: 100%; max-height: 100%; overflow: auto; }
+  #modal img { width: 100%; border: 1px solid var(--edge); border-radius: 6px; display: block; }
+  #modal .btns { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; align-items: center; }
+  #modal small { color: #6b6455; }
+  #bGps { position: absolute; left: 10px; top: 84px; z-index: 800; width: 34px; height: 34px; padding: 0; font-size: 17px; border: 2px solid rgba(0,0,0,.25); border-radius: 5px; background: #fff; }
+  #bGps.on { background: #1e5eff; border-color: #1e5eff; }
+  #gpsInfo { position: absolute; left: 52px; top: 86px; z-index: 800; display: none; background: #fff; border: 1px solid var(--edge); border-radius: 8px; padding: 5px 9px; font-size: 12px; box-shadow: 0 1px 4px rgba(0,0,0,.35); }
+  .me { background: none; border: none; }
+  .me > div { position: absolute; transform: translate(-50%, -50%); width: 18px; height: 18px; border-radius: 50%; background: #1e5eff; border: 3px solid #fff; box-shadow: 0 0 0 2px rgba(30,94,255,.45), 0 1px 4px rgba(0,0,0,.6); }
+  #bMenu { display: none; position: absolute; right: 10px; top: 10px; z-index: 800; height: 38px; padding: 0 12px; font-weight: 700; border: 2px solid rgba(0,0,0,.25); border-radius: 6px; background: #fff; }
+  @media (max-width: 720px) {
+    #wrap { flex-direction: column-reverse; } #side { width: 100%; max-height: 55%; border-right: none; border-top: 1px solid var(--edge); }
+    #head { display: none; } #bMenu { display: block; } body.nomenu #side { display: none; }
+    #xbar #xTitle { width: 150px; } button, select { padding: 10px; }
+  }
+</style>
+</head>
+<body>
+<div id="wrap">
+  <div id="side">
+    <div id="head"><small>ЭКСПОРТЫН ТЭЭВРИЙН ЗАМЫН ХӨДӨЛГӨӨНИЙ УДИРДЛАГЫН ТӨЛӨВЛӨГӨӨ</small><b>Маршрутын газрын зураг</b></div>
+    <div id="scroll">
+      <h3>ХЭСГҮҮД</h3>
+      <div class="row" id="all"><div class="num">★</div><span><b>Бүх маршрут нийтээр</b></span></div>
+      <div id="maps"></div>
+
+      <h3>ЗАСВАР</h3>
+      <div class="grid">
+        <button id="bEdit" class="wide">✏️ Засах горим</button>
+        <button id="bLine">＋ Шугам</button>
+        <button id="bArea">＋ Талбай</button>
+        <button id="bText">＋ Бичээс</button>
+        <button id="bDel" class="warn">🗑 Устгах</button>
+        <button id="bExport" class="wide act" style="background:#b35f00;border-color:#b35f00">📄 Word-д зориулж зураг гаргах</button>
+        <select id="kind" class="wide" title="Шинэ шугамын төрөл">
+          <option value="loaded">Шинэ шугам: ачаатай (хөх)</option>
+          <option value="empty">Шинэ шугам: хоосон (ногоон)</option>
+          <option value="other">Шинэ шугам: бусад зам (шар)</option>
+          <option value="highlight">Шинэ шугам: анхааруулах хэсэг (улбар шар)</option>
+        </select>
+      </div>
+      <div id="hint"></div>
+
+      <h3>ТЭМДЭГ НЭМЭХ</h3>
+      <div id="pal"></div>
+      <input id="iconFile" type="file" accept="image/*" hidden>
+
+      <h3>ХАДГАЛАХ</h3>
+      <div class="grid">
+        <button id="bSave">⬇ Файл болгож татах</button>
+        <button id="bLoad">⬆ Файлаас ачаалах</button>
+        <button id="bReset" class="wide">Анхны байдалд буцаах</button>
+      </div>
+      <input id="file" type="file" accept=".json,application/json" hidden>
+
+      <h3>ТАНИХ ТЭМДЭГ</h3>
+      <div class="leg"><i style="background:var(--load)"></i>Ачаатай чиглэл / тээврийн маршрут</div>
+      <div class="leg"><i style="background:var(--empty)"></i>Хоосон чиглэл</div>
+      <div class="leg"><i style="background:#e0a100"></i>Бусад зам</div>
+      <div class="leg"><i style="background:none;border:2px solid var(--org);height:14px"></i>Талбай, бүс</div>
+      <div class="leg"><i style="background:var(--org);width:12px;height:12px;border-radius:0;transform:rotate(45deg);margin:0 11px"></i>Пүү, орох гарах цэг</div>
+    </div>
+  </div>
+  <div id="mapbox">
+    <div id="map"></div>
+    <button id="bMenu">☰ Цэс</button>
+    <button id="bGps" title="Миний байршлыг харуулах (GPS)">📍</button>
+    <div id="gpsInfo"></div>
+    <div id="frame"></div>
+    <div id="xbar">
+      <input id="xNum" type="number" min="1" title="Зургийн дугаар" placeholder="№">
+      <input id="xTitle" title="Гарчиг" placeholder="Гарчиг">
+      <button id="xGo" class="act">Зураг гаргах</button>
+      <button id="xNo">Болих</button>
+    </div>
+  </div>
+</div>
+<div id="modal"><div>
+  <img id="mImg" alt="Гарсан зураг">
+  <div class="btns">
+    <button id="mCopy" class="act">📋 Хуулах (Word дээр Ctrl+V)</button>
+    <button id="mDown">⬇ Татах</button>
+    <button id="mClose">Хаах</button>
+    <small id="mInfo"></small>
+  </div>
+</div></div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://unpkg.com/@geoman-io/leaflet-geoman-free@2.17.0/dist/leaflet-geoman.min.js"></script>
+<script src="data.js"></script>
+<script>
+(function () {
+  const KEY = 'ot-route-map-app-v1';
+  const C = OT_DATA.colors;
+  const HINT = {
+    view: 'Хэсэг дээр дарвал тэр хэсэг рүү томруулна. Хулганы дугуйгаар томруулж, чирч гүйлгэнэ.',
+    edit: '<b>Засах горим.</b> Шугам, талбайн цагаан цэгийг чирж засна; шугам дээр дарж шинэ цэг нэмнэ, цэг дээр баруун товч дарж хасна. Бичээс, тэмдгийг чирж зөөнө. Бичээс дээр давхар дарж үгийг нь солино.',
+    line: '<b>Шугам зурах.</b> Газрын зураг дээр дарж цэгүүдээ тавиад, сүүлийн цэг дээрээ дахин дарж дуусгана. Явах чиглэлээр нь зурна.',
+    area: '<b>Талбай зурах.</b> Булангуудыг нь дарж тавиад, эхний цэг дээрээ дарж хаана.',
+    text: '<b>Бичээс нэмэх.</b> Бичээс тавих газраа дарна.',
+    icon: '<b>Тэмдэг тавих.</b> Тэмдгээ тавих газраа дарна. Дараа нь засах горимд чирч зөөж болно.',
+    xport: '<b>Word-д зориулж зураг гаргах.</b> Шар хүрээн доторх хэсэг зураг болно. Газрын зургаа чирж, томруулж тааруулаад «Зураг гаргах» дарна.',
+    del: '<b>Устгах горим.</b> Устгах шугам, талбай, бичээс, тэмдэг дээрээ дарна. Дуусаад «Устгах» товчийг дахин дарна.'
+  };
+  const $ = id => document.getElementById(id);
+  const clone = o => JSON.parse(JSON.stringify(o));
+
+  let data;
+  try { data = JSON.parse(localStorage.getItem(KEY) || 'null'); } catch (e) { data = null; }
+  if (!data || !data.maps) data = clone(OT_DATA);
+  // хуучин хадгалсан өгөгдөлд шинээр нэмэгдсэн талбаруудыг нөхнө
+  if (!data.corridor || !data.corridor.features.some(f => f.id === 'c_road' || String(f.id).startsWith('u'))) data.corridor = clone(OT_DATA.corridor);
+  if (!data.customIcons) data.customIcons = {};
+  data.maps.forEach(m => { const o = OT_DATA.maps.find(x => x.n === m.n) || {};
+    ['full', 'legend', 'notes', 'notes_title', 'subtitle'].forEach(k => { if (m[k] === undefined && o[k] !== undefined) m[k] = clone(o[k]); });
+    m.features.forEach(f => { if (f.type === 'end' && f.ha === undefined) { const q = (o.features || []).find(x => x.id === f.id); if (q) { f.ha = q.ha; f.va = q.va; } } }); });
+  data.corridor.n = 0;
+  const sections = () => [data.corridor].concat(data.maps);          // 0 = сайт <-> хил хоорондын зам
+  const BUILTIN = { rest: 'Амрах цэг', customs: 'Гаалийн хяналт', border: 'Хилийн боомт', warn: 'Анхааруулга', railx: 'Төмөр замын гарам', station: 'Өртөө', parking: 'Талбай, зогсоол' };
+  const iconUrl = f => f.src ? (data.customIcons[f.src] || 'icons/warn.png') : 'icons/' + f.icon + '.png';
+  let pick = null;                         // тавихаар сонгосон тэмдэг: {icon} эсвэл {src}
+  function persist() { try { localStorage.setItem(KEY, JSON.stringify(data)); } catch (e) {} }
+
+  const map = L.map('map', { zoomSnap: 0.25, maxZoom: 20 });
+  L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+    { maxNativeZoom: 18, maxZoom: 20, attribution: 'Суурь зураг: Esri World Imagery (Esri, Maxar, Earthstar Geographics)' }).addTo(map);
+  L.control.scale({ imperial: false }).addTo(map);
+  map.pm.setGlobalOptions({ snappable: false, allowSelfIntersection: true });
+  map.pm.setLang('en');
+
+  const groups = {};                       // зургийн дугаар -> L.layerGroup (шугам, талбай)
+  const notes = {};                        // зургийн дугаар -> L.layerGroup (бичээс, тэмдэг) — холоос харахад нуугдана
+  const fitZoom = {};
+  const arrows = L.layerGroup().addTo(map);
+  let touched = false;
+  let mode = 'view', current = null;       // current = сонгосон хэсгийн дугаар (шинэ зүйл үүн дээр нэмэгдэнэ)
+  const hidden = new Set();
+
+  function lineColor(f) {
+    if (f.color) return f.color;
+    return { loaded: C.loaded, route: C.route, empty: C.empty, other: C.other, highlight: C.orange, two_way: C.loaded }[f.kind] || C.route;
+  }
+  function label(html, cls, color) {
+    return L.divIcon({ className: 'lbl', iconSize: null, html: `<div class="${cls || ''}" style="${color ? 'border-color:' + color : ''}">${html}</div>` });
+  }
+  const esc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;');
+
+  function removeFeature(m, f) {
+    m.features = m.features.filter(x => x !== f); persist(); draw();
+    if (m.n === 0 && !m.features.length) { /* сайт–хилийн замыг бүгдийг устгасан бол хоосон үлдэнэ */ }
+  }
+  function clickable(layer, m, f, editText) {
+    layer.on('click', e => { if (mode === 'del') { L.DomEvent.stop(e); removeFeature(m, f); } });
+    if (editText) layer.on('dblclick', e => {
+      L.DomEvent.stop(e);
+      if (mode !== 'edit') return;
+      const t = prompt('Бичээс (шинэ мөрийг | тэмдгээр тусгаарлана):', f.text.replace(/\n/g, ' | '));
+      if (t === null) return;
+      f.text = t.split('|').map(s => s.trim()).join('\n'); persist(); draw();
+    });
+  }
+  function draggable(marker, onMove) {
+    marker.options.pmIgnore = true;
+    marker.on('add', () => { if (mode === 'edit') marker.dragging.enable(); else marker.dragging.disable(); });
+    marker.on('drag', () => onMove(marker.getLatLng(), false));
+    marker.on('dragend', () => { onMove(marker.getLatLng(), true); persist(); });
+  }
+  const ll = p => [+p.lat.toFixed(6), +p.lng.toFixed(6)];
+
+  function drawFeature(m, f, g) {
+    if (f.type === 'route') {
+      const col = lineColor(f), dash = f.style === 'dash' ? '14 10' : f.style === 'dot' ? '2 9' : null;
+      const w = f.kind === 'other' ? 5 : f.kind === 'highlight' ? 11 : 7;
+      const casing = L.polyline(f.pts, { color: '#fff', weight: w + 4, opacity: .95, interactive: false, pmIgnore: true, lineCap: 'round' }).addTo(g);
+      const line = L.polyline(f.pts, { color: col, weight: w, dashArray: dash, lineCap: dash ? 'butt' : 'round' }).addTo(g);
+      let mid = null;
+      if (f.kind === 'two_way') mid = L.polyline(f.pts, { color: C.empty, weight: 3, interactive: false, pmIgnore: true }).addTo(g);
+      const sync = done => {
+        const p = line.getLatLngs(); casing.setLatLngs(p); if (mid) mid.setLatLngs(p);
+        if (done) { f.pts = p.map(ll); persist(); drawArrows(); }
+      };
+      line.on('pm:markerdrag', () => sync(false));
+      line.on('pm:edit pm:vertexadded pm:vertexremoved pm:markerdragend', () => sync(true));
+      clickable(line, m, f);
+      line.bindTooltip({ loaded: 'Ачаатай чиглэл', empty: 'Хоосон чиглэл', route: 'Тээврийн маршрут', other: 'Бусад зам', highlight: 'Анхааруулах хэсэг',
+        two_way: 'Ачаатай, хоосон зэрэгцээ' }[f.kind] || '', { sticky: true });
+      f._line = line;
+    } else if (f.type === 'area') {
+      L.polygon(f.pts, { color: '#fff', weight: 6, fill: false, interactive: false, pmIgnore: true }).addTo(g);
+      const poly = L.polygon(f.pts, { color: f.color || C.orange, weight: 3, fillOpacity: .08 }).addTo(g);
+      poly.on('pm:edit pm:markerdragend', () => { f.pts = poly.getLatLngs()[0].map(ll); persist(); draw(); });
+      clickable(poly, m, f);
+      if (f.label) {
+        const at = f.label_at || poly.getBounds().getCenter();
+        const mk = L.marker(at, { icon: label(esc(f.label), 'bold', f.color || C.orange), zIndexOffset: 300 }).addTo(g);
+        draggable(mk, p => { f.label_at = ll(p); });
+        mk.on('click', e => { if (mode === 'del') { L.DomEvent.stop(e); removeFeature(m, f); } });
+        mk.on('dblclick', e => { L.DomEvent.stop(e); if (mode !== 'edit') return;
+          const t = prompt('Талбайн нэр (шинэ мөрийг | тэмдгээр):', f.label.replace(/\n/g, ' | ')); if (t === null) return;
+          f.label = t.split('|').map(s => s.trim()).join('\n'); persist(); draw(); });
+      }
+    } else if (f.type === 'icon') {
+      const mk = L.marker(f.at, { icon: L.icon({ iconUrl: iconUrl(f), iconSize: [34, 34], iconAnchor: [17, 17] }), zIndexOffset: 400 }).addTo(g);
+      draggable(mk, p => { f.at = ll(p); }); clickable(mk, m, f);
+    } else if (f.type === 'label') {
+      const mk = L.marker(f.at, { icon: label(esc(f.text), f.km ? 'km' : f.plain ? 'plain' : 'bold', f.color), zIndexOffset: f.km ? 100 : 300 }).addTo(g);
+      draggable(mk, p => { f.at = ll(p); }); clickable(mk, m, f, true);
+    } else if (f.type === 'end') {
+      let html;
+      if (f.icon || f.src) html = L.icon({ iconUrl: iconUrl(f), iconSize: [34, 34], iconAnchor: [17, 17] });
+      else { const k = { A: [C.start, 'A'], B: [C.finish, 'B'], more: [C.ink, '»'] }[f.kind] || [C.ink, '•'];
+        html = label(k[1], 'badge', '#fff'); html.options.html = html.options.html.replace('style="', `style="background:${k[0]};`); }
+      const dot = L.marker(f.at, { icon: html, zIndexOffset: 500 }).addTo(g);
+      const z = fitZoom[m.n] || map.getZoom();
+      const off = map.unproject(map.project(f.at, z).add([(f.dx || 0) * 3 + (f.dx > 4 ? 60 : f.dx < -4 ? -60 : 0), (f.dy || 0) * 2.4 + (Math.abs(f.dx || 0) > 4 ? 0 : f.dy < 0 ? -14 : 14)]), z);
+      const txtAt = f.label_at || off;
+      const txt = L.marker(txtAt, { icon: label(esc(f.text), 'bold', C.ink), zIndexOffset: 450 }).addTo(g);
+      draggable(dot, p => { f.at = ll(p); }); draggable(txt, p => { f.label_at = ll(p); });
+      clickable(dot, m, f); clickable(txt, m, f, true);
+    } else if (f.type === 'callout') {
+      const col = f.color || C.orange;
+      let leader = null, tip = null;
+      if (f.tip) {
+        leader = L.polyline([f.tip, f.at], { color: col, weight: 2, interactive: false, pmIgnore: true }).addTo(g);
+        const shape = f.marker === 'diamond' ? 'transform:translate(-50%,-50%) rotate(45deg);' : f.marker ? 'border-radius:50%;' : 'border-radius:50%;width:8px;height:8px;';
+        tip = L.marker(f.tip, { icon: L.divIcon({ className: 'tip', iconSize: null, html: `<div style="background:${col};${shape}"></div>` }), zIndexOffset: 350 }).addTo(g);
+        draggable(tip, p => { f.tip = ll(p); leader.setLatLngs([f.tip, f.at]); }); clickable(tip, m, f);
+      }
+      const box = L.marker(f.at, { icon: label(esc(f.text), '', col), zIndexOffset: 300 }).addTo(g);
+      draggable(box, p => { f.at = ll(p); if (leader) leader.setLatLngs([f.tip, f.at]); }); clickable(box, m, f, true);
+    }
+  }
+
+  function drawArrows() {
+    arrows.clearLayers();
+    sections().forEach(m => {
+      if (hidden.has(m.n)) return;
+      m.features.forEach(f => {
+        if (f.type !== 'route' || !f.direction || f.pts.length < 2) return;
+        const pts = f.pts.map(p => map.latLngToLayerPoint(p));
+        if (f.direction < 0) pts.reverse();
+        const gap = 70; let next = gap / 2, acc = 0;
+        for (let i = 1; i < pts.length; i++) {
+          const a = pts[i - 1], b = pts[i], d = a.distanceTo(b);
+          while (d > 0 && next <= acc + d) {
+            const t = (next - acc) / d, p = L.point(a.x + (b.x - a.x) * t, a.y + (b.y - a.y) * t);
+            const ang = Math.atan2(b.y - a.y, b.x - a.x) * 180 / Math.PI;
+            L.marker(map.layerPointToLatLng(p), { interactive: false, pmIgnore: true, keyboard: false, zIndexOffset: 200, icon: L.divIcon({ className: 'arr', iconSize: null,
+              html: `<div><svg width="12" height="12" viewBox="0 0 12 12" style="transform:rotate(${ang}deg)"><path d="M3.5 2 L8 6 L3.5 10" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>` }) }).addTo(arrows);
+            next += gap;
+          }
+          acc += d;
+        }
+      });
+    });
+  }
+
+  function draw() {
+    Object.values(groups).forEach(g => g.remove()); Object.values(notes).forEach(g => g.remove());
+    sections().forEach(m => {
+      fitZoom[m.n] = m.n ? map.getBoundsZoom(m.bounds) : 9;
+      const g = groups[m.n] = L.layerGroup(), t = notes[m.n] = L.layerGroup();
+      m.features.forEach(f => drawFeature(m, f, f.type === 'route' || f.type === 'area' ? g : t));
+      if (!hidden.has(m.n)) g.addTo(map);
+    });
+    showNotes(); drawArrows(); applyMode();
+  }
+  // бичээс, тэмдгийг тухайн хэсэг рүү ойртсон үед л харуулна (холоос бүгд давхцахаас сэргийлнэ)
+  function showNotes() {
+    sections().forEach(m => {
+      if (!notes[m.n]) return;
+      const on = !hidden.has(m.n) && map.getZoom() >= fitZoom[m.n] - 1.3;
+      if (on && !map.hasLayer(notes[m.n])) { notes[m.n].addTo(map); applyDrag(); }
+      if (!on && map.hasLayer(notes[m.n])) notes[m.n].remove();
+    });
+  }
+  function applyDrag() {
+    map.eachLayer(l => { if (l.dragging && l.options && l.options.pmIgnore && l instanceof L.Marker && l.options.interactive !== false) { mode === 'edit' ? l.dragging.enable() : l.dragging.disable(); } });
+  }
+
+  function applyMode() {
+    map.pm.disableDraw(); map.pm.disableGlobalEditMode();
+    if (mode === 'edit') map.pm.enableGlobalEditMode({ limitMarkersToCount: 60 });
+    if (mode === 'line') map.pm.enableDraw('Line', { templineStyle: { color: lineColor({ kind: $('kind').value }) }, hintlineStyle: { color: '#fff', dashArray: '4 6' } });
+    if (mode === 'area') map.pm.enableDraw('Polygon', { templineStyle: { color: C.orange }, hintlineStyle: { color: '#fff', dashArray: '4 6' } });
+    applyDrag();
+    $('map').classList.toggle('del-mode', mode === 'del');
+    $('map').style.cursor = mode === 'text' || mode === 'icon' ? 'crosshair' : '';
+    $('frame').style.display = $('xbar').style.display = mode === 'xport' ? (placeFrame(), 'flex') : 'none';
+    document.querySelectorAll('#pal .ic').forEach(b => b.classList.toggle('sel', mode === 'icon' && b.dataset.k === JSON.stringify(pick)));
+    [['bEdit', 'edit'], ['bLine', 'line'], ['bArea', 'area'], ['bText', 'text'], ['bDel', 'del']].forEach(([id, k]) => $(id).classList.toggle('act', mode === k));
+    $('hint').innerHTML = HINT[mode] + (['line', 'area', 'text', 'icon'].includes(mode) ? `<br>Нэмэх хэсэг: <b>${target().n}. ${esc(target().title)}</b>` : '');
+  }
+  function setMode(k) { mode = mode === k ? 'view' : k; applyMode(); }
+  function target() { return data.maps.find(m => m.n === current) || data.maps[0]; }
+  const newId = () => 'u' + Date.now().toString(36) + Math.floor(Math.random() * 1e4);
+
+  map.on('pm:create', e => {
+    const pts = (e.shape === 'Polygon' ? e.layer.getLatLngs()[0] : e.layer.getLatLngs()).map(ll);
+    e.layer.remove();
+    const m = target();
+    if (e.shape === 'Line') m.features.push({ id: newId(), type: 'route', kind: $('kind').value, style: 'solid', direction: $('kind').value === 'loaded' || $('kind').value === 'empty' ? 1 : 0, pts });
+    else { const name = prompt('Талбайн нэр:', 'ТАЛБАЙ'); m.features.push({ id: newId(), type: 'area', pts, label: name || '', color: C.orange }); }
+    persist(); mode = 'edit'; draw();
+  });
+  map.on('click', e => {
+    if (mode === 'icon' && pick) { target().features.push(Object.assign({ id: newId(), type: 'icon', at: ll(e.latlng) }, pick)); persist(); mode = 'edit'; draw(); return; }
+    if (mode !== 'text') return;
+    const t = prompt('Бичээс (шинэ мөрийг | тэмдгээр тусгаарлана):', '');
+    if (t) { target().features.push({ id: newId(), type: 'callout', text: t.split('|').map(s => s.trim()).join('\n'), at: ll(e.latlng), color: C.orange, marker: null }); persist(); }
+    mode = 'edit'; draw();
+  });
+  map.on('zoomend', () => { showNotes(); drawArrows(); });
+
+  function bounds(list) { const b = L.latLngBounds([]); list.forEach(m => { if (m.bounds) b.extend(m.bounds); m.features.forEach(f => (f.pts || [f.at]).forEach(p => p && b.extend(p))); }); return b; }
+  function focus(n, detail) {
+    current = n;
+    const sel = data.maps.find(m => m.n === n);
+    hidden.clear();                                    // хэсэг сонгоход зөвхөн тэр хэсэг харагдана; «Бүх маршрут» дээр бүгд
+    if (n !== null) data.maps.forEach(m => { if (m.n !== n) hidden.add(m.n); });
+    if (!(sel && sel.full)) hidden.add(0);             // сайт <-> хилийн зам зөвхөн бүтэн маршруттай хэсэгт (E-comm, Нуур, ХуаФан) хамт гарна
+    document.querySelectorAll('#maps .row').forEach(r => { r.querySelector('input').checked = !hidden.has(+r.dataset.n); });
+    draw();
+    document.querySelectorAll('#maps .row, #all').forEach(r => r.classList.toggle('on', r.dataset.n == String(n)));
+    if (n === null) map.fitBounds(bounds(data.maps), { padding: [20, 20] });
+    else if (sel.full && !detail) map.fitBounds(bounds([sel, data.corridor]), { padding: [20, 20] });   // сайтаас очоод буцах бүтэн зам
+    else map.fitBounds(sel.bounds, { padding: [10, 10] });
+    applyMode();
+  }
+  function sidebar() {
+    $('maps').innerHTML = '';
+    data.maps.forEach(m => {
+      const r = document.createElement('div'); r.className = 'row'; r.dataset.n = m.n;
+      r.innerHTML = `<div class="num">${m.n}</div><span>${esc(m.title)}${m.full ? '<br><small style="color:#6b6455">сайт → талбай → сайт</small>' : ''}</span>` +
+        (m.full ? '<button class="zoom" title="Зөвхөн талбайн орчмыг томруулах">🔍</button>' : '') +
+        `<input type="checkbox" title="Харуулах / нуух" ${hidden.has(m.n) ? '' : 'checked'}>`;
+      r.addEventListener('click', e => { if (e.target.tagName === 'INPUT') return; focus(m.n, e.target.classList.contains('zoom')); });
+      r.querySelector('input').addEventListener('change', e => { e.target.checked ? hidden.delete(m.n) : hidden.add(m.n); draw(); });
+      $('maps').appendChild(r);
+    });
+  }
+
+  $('all').dataset.n = 'null';
+  $('all').addEventListener('click', () => focus(null));
+  $('bEdit').onclick = () => setMode('edit'); $('bLine').onclick = () => setMode('line'); $('bArea').onclick = () => setMode('area');
+  $('bText').onclick = () => setMode('text'); $('bDel').onclick = () => setMode('del');
+  $('kind').onchange = () => { if (mode === 'line') applyMode(); };
+  $('bSave').onclick = () => {
+    const out = JSON.parse(JSON.stringify(data, (k, v) => k === '_line' ? undefined : v));
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([JSON.stringify(out, null, 1)], { type: 'application/json' }));
+    a.download = 'ot-marshrut-' + new Date().toISOString().slice(0, 10) + '.json'; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+  };
+  $('bLoad').onclick = () => $('file').click();
+  $('file').onchange = e => {
+    const f = e.target.files[0]; if (!f) return;
+    f.text().then(t => { const d = JSON.parse(t); if (!d.maps) throw 0; data = d; if (!data.corridor) data.corridor = clone(OT_DATA.corridor); data.corridor.n = 0; if (!data.customIcons) data.customIcons = {}; persist(); sidebar(); palette(); draw(); focus(null); })
+      .catch(() => alert('Энэ файлыг уншиж чадсангүй. Энэ апп-аас татсан .json файл байх ёстой.'));
+    e.target.value = '';
+  };
+  $('bReset').onclick = () => { if (confirm('Таны гараар хийсэн бүх засвар устаж, анхны зураг сэргэнэ. Үргэлжлүүлэх үү?')) { const keepIcons = data.customIcons; data = clone(OT_DATA); data.corridor.n = 0; data.customIcons = keepIcons || {}; persist(); sidebar(); palette(); draw(); focus(null); } };
+
+  // ---- тэмдгийн самбар: бэлэн тэмдгүүд + өөрийн оруулсан зураг ----
+  function palette() {
+    const el = $('pal'); el.innerHTML = '';
+    const add = (key, url, title) => {
+      const b = document.createElement('button'); b.className = 'ic'; b.title = title; b.dataset.k = JSON.stringify(key); b.style.backgroundImage = `url("${url}")`;
+      b.onclick = () => { pick = key; mode = mode === 'icon' && b.classList.contains('sel') ? 'view' : 'icon'; applyMode(); };
+      if (key.src) b.oncontextmenu = e => { e.preventDefault(); if (confirm('Энэ тэмдгийг самбараас хасах уу? (Газрын зураг дээр тавьсан нь анхааруулгын тэмдэг болж харагдана.)')) { delete data.customIcons[key.src]; persist(); palette(); draw(); } };
+      el.appendChild(b);
+    };
+    Object.entries(BUILTIN).forEach(([k, t]) => add({ icon: k }, 'icons/' + k + '.png', t));
+    Object.entries(data.customIcons).forEach(([k, url]) => add({ src: k }, url, 'Таны оруулсан тэмдэг (хасах бол баруун товч)'));
+    const up = document.createElement('button'); up.className = 'ic add'; up.textContent = '＋'; up.title = 'Замын тэмдгийн зураг оруулах'; up.onclick = () => $('iconFile').click(); el.appendChild(up);
+  }
+  $('iconFile').onchange = e => {
+    const file = e.target.files[0]; e.target.value = ''; if (!file) return;
+    const img = new Image();
+    img.onload = () => {                                   // 160 цэгт багтааж жижигрүүлээд хөтөч дотор хадгална
+      const k = Math.min(1, 160 / Math.max(img.width, img.height)), c = document.createElement('canvas');
+      c.width = Math.round(img.width * k); c.height = Math.round(img.height * k); c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+      const id = 'i' + Date.now().toString(36); data.customIcons[id] = c.toDataURL('image/png'); persist(); palette();
+      pick = { src: id }; mode = 'icon'; applyMode(); URL.revokeObjectURL(img.src);
+    };
+    img.onerror = () => alert('Энэ зургийг уншиж чадсангүй.');
+    img.src = URL.createObjectURL(file);
+  };
+
+  // ---- Word-д зориулж зураг гаргах: шар хүрээ = төлөвлөгөөний загварын харьцаа (1280 : 914) ----
+  function placeFrame() {
+    const box = $('map').getBoundingClientRect(), A = 1280 / 914, pad = 18;
+    let w = box.width - 2 * pad, h = w / A; if (h > box.height - 2 * pad - 50) { h = box.height - 2 * pad - 50; w = h * A; }
+    const f = $('frame').style; f.width = w + 'px'; f.height = h + 'px'; f.left = (box.width - w) / 2 + 'px'; f.top = (box.height - h) / 2 + 25 + 'px';
+    return { x: (box.width - w) / 2, y: (box.height - h) / 2 + 25, w, h };
+  }
+  $('bExport').onclick = () => {
+    const sel = data.maps.find(m => m.n === current);
+    $('xTitle').value = sel ? sel.title : 'Экспортын тээврийн маршрут'; $('xNum').value = sel ? sel.n : data.maps.length + 1;
+    setMode('xport');
+  };
+  $('xNo').onclick = () => { mode = 'view'; applyMode(); };
+  let lastBlob = null;
+  $('xGo').onclick = async () => {
+    const r = placeFrame(), sw = map.containerPointToLatLng([r.x, r.y + r.h]), ne = map.containerPointToLatLng([r.x + r.w, r.y]);
+    const sel = data.maps.find(m => m.n === current);
+    const feats = []; sections().forEach(m => { if (!hidden.has(m.n)) feats.push(...m.features); });
+    const body = JSON.stringify({ bounds: [[sw.lat, sw.lng], [ne.lat, ne.lng]], number: +$('xNum').value || 1, title: $('xTitle').value, subtitle: sel ? sel.subtitle : '',
+      features: feats, icons: data.customIcons, legend: sel ? sel.legend : null, notes: sel ? sel.notes : null, notes_title: sel ? sel.notes_title : null },
+      (k, v) => k === '_line' ? undefined : v);
+    document.body.classList.add('busy'); $('xGo').disabled = true; $('xGo').textContent = 'Зурж байна…';
+    try {
+      const res = await fetch('/export', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body });
+      if (!res.ok) throw new Error(await res.text());
+      lastBlob = await res.blob();
+      $('mImg').src = URL.createObjectURL(lastBlob);
+      $('mInfo').textContent = 'Хадгалсан: ' + (res.headers.get('X-Saved-As') || '') + (res.headers.get('X-Overflow') === '1' ? ' · АНХААР: тайлбар самбарт багтаагүй' : '');
+      $('modal').style.display = 'flex'; mode = 'view'; applyMode();
+    } catch (err) {
+      alert(location.protocol === 'file:' ? 'Зураг гаргахын тулд аппыг «start_app.command» файлаар асаасан байх ёстой.' : 'Зураг гаргаж чадсангүй: ' + err.message);
+    } finally { document.body.classList.remove('busy'); $('xGo').disabled = false; $('xGo').textContent = 'Зураг гаргах'; }
+  };
+  $('mClose').onclick = () => { $('modal').style.display = 'none'; };
+  $('mDown').onclick = () => { const a = document.createElement('a'); a.href = $('mImg').src; a.download = 'zurag-' + ($('xNum').value || '') + '.png'; a.click(); };
+  $('mCopy').onclick = async () => {
+    try { await navigator.clipboard.write([new ClipboardItem({ 'image/png': lastBlob })]); $('mCopy').textContent = '✓ Хууллаа — Word дээр Ctrl+V'; }
+    catch (e) { alert('Хуулж чадсангүй. «Татах» товчоор файл болгож аваад Word-д оруулна уу.'); }
+    setTimeout(() => { $('mCopy').textContent = '📋 Хуулах (Word дээр Ctrl+V)'; }, 2500);
+  };
+  window.addEventListener('resize', () => { if (mode === 'xport') placeFrame(); });
+
+  // ---- утас: цэсийг нээх/хаах; компьютерийн сервергүй үед зураг гаргах товчийг нуух ----
+  $('bMenu').onclick = () => { document.body.classList.toggle('nomenu'); setTimeout(() => map.invalidateSize(), 50); };
+  if (!/^(localhost|127\.0\.0\.1)$/.test(location.hostname)) $('bExport').style.display = 'none';
+  if (window.matchMedia('(max-width: 720px)').matches) document.body.classList.add('nomenu');
+
+  // ---- GPS: миний одоогийн байршил ----
+  let watch = null, meDot = null, meRing = null, firstFix = true;
+  function gpsStop(msg) {
+    if (watch !== null) navigator.geolocation.clearWatch(watch); watch = null;
+    if (meDot) { meDot.remove(); meRing.remove(); meDot = meRing = null; }
+    $('bGps').classList.remove('on'); $('gpsInfo').style.display = msg ? 'block' : 'none'; $('gpsInfo').textContent = msg || '';
+  }
+  $('bGps').onclick = () => {
+    if (watch !== null) return gpsStop();
+    if (!navigator.geolocation) return gpsStop('Энэ хөтөч байршил тогтоож чадахгүй байна.');
+    firstFix = true; $('bGps').classList.add('on'); $('gpsInfo').style.display = 'block'; $('gpsInfo').textContent = 'Байршлыг хайж байна…';
+    watch = navigator.geolocation.watchPosition(pos => {
+      const p = [pos.coords.latitude, pos.coords.longitude], acc = pos.coords.accuracy || 0;
+      if (!meDot) {
+        meRing = L.circle(p, { radius: acc, color: '#1e5eff', weight: 1, fillOpacity: .12, interactive: false, pmIgnore: true }).addTo(map);
+        meDot = L.marker(p, { icon: L.divIcon({ className: 'me', iconSize: null, html: '<div></div>' }), interactive: false, pmIgnore: true, zIndexOffset: 1000 }).addTo(map);
+      } else { meDot.setLatLng(p); meRing.setLatLng(p); meRing.setRadius(acc); }
+      if (firstFix) { firstFix = false; touched = true; map.setView(p, Math.max(map.getZoom(), 15)); }
+      $('gpsInfo').textContent = `Таны байршил: ${p[0].toFixed(5)}, ${p[1].toFixed(5)} · нарийвчлал ±${Math.round(acc)} м`;
+    }, err => {
+      gpsStop(err.code === 1 ? 'Байршил ашиглах зөвшөөрөл өгөөгүй байна. Хөтчийн хаягийн мөрний түгжээн дээр дарж «Location»-ийг зөвшөөрнө үү.'
+        : err.code === 3 ? 'Байршил тогтоож амжсангүй. Дахин дарж үзнэ үү.' : 'Байршил тогтоож чадсангүй (GPS, Wi-Fi асаалттай эсэхийг шалгана уу).');
+    }, { enableHighAccuracy: true, maximumAge: 5000, timeout: 20000 });
+  };
+
+  // хадгалахдаа дотоод холбоосыг (_line) оруулахгүй
+  const _persist = persist;
+  persist = function () { const keep = []; sections().forEach(m => m.features.forEach(f => { if (f._line) { keep.push([f, f._line]); delete f._line; } })); _persist(); keep.forEach(([f, l]) => f._line = l); };
+
+  sidebar(); palette();
+  map.fitBounds(bounds(data.maps), { padding: [20, 20] });
+  draw(); focus(null);
+
+  // цонхны хэмжээ өөрчлөгдөхөд (эсвэл эхэндээ нуугдмал байсан бол) газрын зургийг дахин тааруулна
+  map.on('mousedown wheel touchstart', () => { touched = true; });
+  document.querySelectorAll('#maps .row, #all').forEach(r => r.addEventListener('click', () => { touched = true; }));
+  new ResizeObserver(() => { map.invalidateSize(); if (!touched) map.fitBounds(bounds(data.maps), { padding: [20, 20] }); drawArrows(); }).observe($('map'));
+})();
+</script>
+</body>
+</html>
