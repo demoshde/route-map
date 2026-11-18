@@ -331,7 +331,7 @@
   function showNotes() {
     sections().forEach(m => {
       if (!notes[m.n]) return;
-      const on = !hidden.has(m.n) && map.getZoom() >= fitZoom[m.n] - 1.3;
+      const on = !hidden.has(m.n) && map.getZoom() >= fitZoom[m.n] - (current === null ? 0.2 : 1.3);   // нийтээр харахад бичээс давхцахгүйн тулд нуусан
       if (on && !map.hasLayer(notes[m.n])) { notes[m.n].addTo(map); applyDrag(); }
       if (!on && map.hasLayer(notes[m.n])) notes[m.n].remove();
     });
